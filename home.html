@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GameWorld — Home</title>
+<style>
+  :root{--accent:#0f3460;--accentHover:#533483}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#fff;color:#222;min-height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eee;background:#fafafa;position:sticky;top:0;z-index:40}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--accent)}
+  .console-icon{width:36px;height:36px;border-radius:8px;background:#e9eef9;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent)}
+  .left{display:flex;align-items:center;gap:10px}
+  .username{font-weight:600;color:var(--accent);cursor:pointer}
+  nav{display:flex;gap:8px;align-items:center}
+  button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+  button:hover{background:var(--accentHover)}
+  .coin{margin-left:10px;font-weight:600}
+  .container{max-width:1100px;margin:24px auto;padding:12px}
+  h2{margin:0 0 12px;font-size:18px}
+  .grid{display:flex;flex-wrap:wrap;gap:16px}
+  .card{width:220px;padding:12px;border-radius:10px;background:#fbfbfb;border:1px solid #eee;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.04)}
+  .thumb{width:100%;height:120px;object-fit:cover;border-radius:8px;background:#fff}
+  .dots{position:absolute;top:8px;right:8px;background:none;border:none;font-size:18px;cursor:pointer;color:#666}
+  .menu{position:absolute;top:36px;right:8px;background:#fff;border:1px solid #eee;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.08);display:none;flex-direction:column;min-width:160px;z-index:70}
+  .menu button{background:none;border:none;padding:10px 12px;text-align:left;cursor:pointer;color:#222}
+  .menu button:hover{background:#f3f4f6}
+  .muted{color:#666;font-size:13px}
+  .section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .empty{padding:12px;color:#666}
+  .admin-btn{background:#fff;border:1px solid #ddd;color:var(--accent);padding:6px 10px;border-radius:8px;cursor:pointer}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:100}
+  .panel{background:#fff;padding:18px;border-radius:10px;width:880px;max-height:80vh;overflow:auto}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+  @media (max-width:720px){ .card{width:calc(50% - 18px)} }
+  @media (max-width:420px){ .card{width:100%} nav{display:none} }
+  /* VIP toggle */
+  .vip-toggle{margin-left:12px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<script>
+  /* --- storage helpers --- */
+  function getAccounts(){ return JSON.parse(localStorage.getItem('accounts')||'[]'); }
+  function saveAccounts(a){ localStorage.setItem('accounts', JSON.stringify(a)); }
+  function getCurrentUser(){ return localStorage.getItem('loggedInUser'); }
+  function ensureUser(username){
+    if(!username) return null;
+    const a=getAccounts(); const u=a.find(x=>x.username===username);
+    if(u){
+      if(typeof u.coins !== 'number') u.coins = Number(u.coins||0);
+      if(!u.friends) u.friends = [];
+      if(typeof u.banned === 'undefined') u.banned = false;
+      if(!u.vip) u.vip = null;
+      return u;
+    }
+    return null;
+  }
+  function updateUser(u){ const a=getAccounts(); const i=a.findIndex(x=>x.username===u.username); if(i>=0){ a[i]=u; saveAccounts(a); } }
+  function uid(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+  function getPaints(){ return JSON.parse(localStorage.getItem('paintHistory')||'[]'); }
+  function savePaints(p){ localStorage.setItem('paintHistory', JSON.stringify(p)); }
+  function getProducts(){ return JSON.parse(localStorage.getItem('products')||'[]'); }
+  function saveProducts(p){ localStorage.setItem('products', JSON.stringify(p)); }
+  function getGames(){ return JSON.parse(localStorage.getItem('games')||'[]'); }
+  function saveGames(g){ localStorage.setItem('games', JSON.stringify(g)); }
+  function getRedeemCodes(){ return JSON.parse(localStorage.getItem('redeemCodes')||'{}'); }
+  function saveRedeemCodes(c){ localStorage.setItem('redeemCodes', JSON.stringify(c)); }
+
+  // seed redeem codes if empty
+  (function seedCodes(){
+    const c = getRedeemCodes();
+    if(Object.keys(c).length===0){
+      c['3D14U1Z'] = 50;
+      c['41RUL5Y'] = 100;
+      saveRedeemCodes(c);
+    }
+  })();
+</script>
+
+<header>
+  <div class="left brand">
+    <div class="console-icon">▦</div>
+    <div>
+      <div style="font-size:14px">GameWorld</div>
+      <div style="font-size:12px;color:#888">Create • Play • Share</div>
+    </div>
+  </div>
+
+  <nav>
+    <div class="username" id="usernameDisplay">Welcome, Player</div>
+    <button onclick="goCreate()">Create</button>
+    <button onclick="goCoin()">Coin</button>
+    <button onclick="goFriends()">Friends</button>
+    <button onclick="goShop()">Shop</button>
+    <div class="coin" id="coinDisplay">💰 Coins: 0</div>
+    <!-- VIP toggle placeholder -->
+    <button id="vipToggle" class="vip-toggle" style="display:none" title="Toggle Eternity VIP">👑 VIP: ON</button>
+    <!-- Admin button for owners -->
+    <button id="adminHomeBtn" class="admin-btn" style="display:none">⚙️ Admin</button>
+    <button style="background:#e94560" onclick="logout()">Logout</button>
+  </nav>
+</header>
+
+<main class="container">
+  <section>
+    <div class="section-title"><h2>History Library</h2></div>
+    <div id="historyLibrary" class="grid"></div>
+  </section>
+
+  <section>
+    <div class="section-title"><h2>Game Discovery</h2></div>
+    <div id="gameDiscovery" class="grid"></div>
+  </section>
+
+  <section>
+    <div class="section-title"><h2>Friends Online</h2></div>
+    <div id="friendsOnline" class="grid"></div>
+  </section>
+</main>
+
+<!-- Admin Modal (open from home admin button) -->
+<div class="modal" id="adminModal">
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">Admin Panel</h3>
+      <div><button onclick="closeAdmin()">Close</button></div>
+    </div>
+
+    <section style="margin-bottom:12px">
+      <h4>Redeem Codes</h4>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="newCode" placeholder="CODE (uppercase)">
+        <input id="newCodeVal" type="number" placeholder="Value" style="width:120px">
+        <button onclick="adminAddCode()">Add Code</button>
+      </div>
+      <div id="codesList" class="muted"></div>
+    </section>
+
+    <section>
+      <h4>All Users</h4>
+      <table id="usersTable">
+        <thead><tr><th>Username</th><th>Coins</th><th>VIP</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+</div>
+
+<script>
+  // navigation
+  function goCreate(){ location.href='create.html' }
+  function goCoin(){ location.href='coin.html' }
+  function goFriends(){ location.href='friends.html' }
+  function goShop(){ location.href='shop.html' }
+  function logout(){ localStorage.removeItem('loggedInUser'); location.href='index.html' }
+
+  // init
+  const logged = getCurrentUser();
+  if(!logged){ location.href='index.html'; }
+  const owners = ['Airulmsyah','AMS','Ams09'];
+  const isOwner = owners.includes(logged);
+
+  const unameEl = document.getElementById('usernameDisplay');
+  function refreshHeader(){
+    const cur = ensureUser(getCurrentUser());
+    if(!cur) return;
+    let crown = (cur.vip && cur.vip.active) ? ' 👑' : '';
+    unameEl.textContent = `Welcome, ${cur.username}${crown}`;
+    document.getElementById('coinDisplay').textContent = `💰 Coins: ${Number(cur.coins||0)}`;
+    // show vip toggle if user has ET vip
+    const vipToggle = document.getElementById('vipToggle');
+    if(cur.vip && cur.vip.type === 'ET'){
+      vipToggle.style.display = 'inline-block';
+      vipToggle.textContent = cur.vip.active ? '👑 VIP: ON' : '👑 VIP: OFF';
+    } else {
+      vipToggle.style.display = 'none';
+    }
+    // show admin button for owners
+    document.getElementById('adminHomeBtn').style.display = isOwner ? 'inline-block' : 'none';
+  }
+  unameEl.onclick = ()=> location.href='avatar.html';
+
+  // VIP toggle behaviour
+  document.getElementById('vipToggle').addEventListener('click', ()=>{
+    const cur = ensureUser(getCurrentUser());
+    if(!cur || !cur.vip || cur.vip.type !== 'ET') return;
+    cur.vip.active = !cur.vip.active;
+    updateUser(cur);
+    refreshHeader();
+    alert('Eternity VIP ' + (cur.vip.active ? 'enabled' : 'disabled') + '.');
+  });
+
+  // Admin modal handlers
+  document.getElementById('adminHomeBtn').addEventListener('click', ()=> openAdmin());
+  function openAdmin(){ document.getElementById('adminModal').style.display='flex'; renderAdmin(); }
+  function closeAdmin(){ document.getElementById('adminModal').style.display='none'; }
+
+  function renderAdmin(){
+    // codes
+    const codes = getRedeemCodes();
+    const codesDiv = document.getElementById('codesList');
+    codesDiv.innerHTML = Object.keys(codes).length ? Object.entries(codes).map(kv=>`<div>${kv[0]} — ${kv[1]} <button onclick="adminRemoveCode('${kv[0]}')">Delete</button></div>`).join('') : '<div class="muted">No redeem codes</div>';
+    // users
+    const accounts = getAccounts();
+    const tbody = document.querySelector('#usersTable tbody'); tbody.innerHTML = '';
+    accounts.forEach(u=>{
+      const tr = document.createElement('tr');
+      const vipText = u.vip ? `${u.vip.type}${u.vip.active ? ' (active)' : ' (off)'}` : '-';
+      const status = u.banned ? 'BANNED' : 'OK';
+      tr.innerHTML = `<td>${u.username}</td><td>${Number(u.coins||0)}</td><td>${vipText}</td><td>${status}</td><td></td>`;
+      const actionsTd = tr.querySelector('td:last-child');
+      const addBtn = document.createElement('button'); addBtn.textContent='+Coins'; addBtn.onclick = ()=>{ const a=Number(prompt('Amount to add?')); if(a>0){ u.coins = (u.coins||0)+a; updateUser(u); renderAdmin(); refreshHeader(); } };
+      actionsTd.appendChild(addBtn);
+      const banBtn = document.createElement('button'); banBtn.style.marginLeft='6px'; banBtn.textContent = u.banned ? 'Unban' : 'Ban'; banBtn.onclick = ()=>{ u.banned = !u.banned; updateUser(u); renderAdmin(); };
+      actionsTd.appendChild(banBtn);
+      const rv = document.createElement('button'); rv.style.marginLeft='6px'; rv.textContent='Remove VIP'; rv.onclick = ()=>{ u.vip=null; updateUser(u); renderAdmin(); refreshHeader(); };
+      actionsTd.appendChild(rv);
+      const dg = document.createElement('button'); dg.style.marginLeft='6px'; dg.textContent='Delete Games'; dg.onclick = ()=>{ if(confirm('Delete games by '+u.username+'?')){ let games = getGames(); games = games.filter(g=>g.creator!==u.username); saveGames(games); alert('Deleted.'); renderAdmin(); } };
+      actionsTd.appendChild(dg);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function adminAddCode(){ const code=(document.getElementById('newCode').value||'').trim().toUpperCase(); const val=Number(document.getElementById('newCodeVal').value); if(!code||!val) return alert('Enter code and value'); const c = getRedeemCodes(); c[code]=val; saveRedeemCodes(c); document.getElementById('newCode').value=''; document.getElementById('newCodeVal').value=''; renderAdmin(); }
+  function adminRemoveCode(c){ if(confirm('Remove code '+c+'?')){ const codes = getRedeemCodes(); delete codes[c]; saveRedeemCodes(codes); renderAdmin(); } }
+
+  // render content (history/games/friends)
+  function renderHistory(){
+    const grid = document.getElementById('historyLibrary');
+    const paints = getPaints().filter(p=>p.owner === logged);
+    if(!paints.length){ grid.innerHTML = '<div class="empty">No items yet. Create some art!</div>'; return; }
+    grid.innerHTML = '';
+    paints.forEach(p=>{
+      const card = document.createElement('div'); card.className='card';
+      const img = document.createElement('img'); img.src=p.dataUrl; img.className='thumb';
+      card.appendChild(img);
+      const title = document.createElement('div'); title.style.marginTop='8px'; title.textContent = p.name||p.id;
+      card.appendChild(title);
+      const dots = document.createElement('button'); dots.className='dots'; dots.textContent='⋮';
+      card.appendChild(dots);
+      const menu = document.createElement('div'); menu.className='menu';
+      const btnView = document.createElement('button'); btnView.innerHTML='👁️ View'; btnView.onclick = ()=> location.href='view_item.html?id='+p.id;
+      const btnRename = document.createElement('button'); btnRename.innerHTML='✏️ Rename'; btnRename.onclick = ()=>{ const nn=prompt('Rename item', p.name||''); if(nn!==null){ p.name = nn||p.name; const all=getPaints(); const i=all.findIndex(x=>x.id===p.id); if(i>=0){ all[i]=p; savePaints(all);} renderHistory(); }};
+      const btnDownload = document.createElement('button'); btnDownload.innerHTML='⬇️ Download'; btnDownload.onclick = ()=>{ const a=document.createElement('a'); a.href=p.dataUrl; a.download=(p.name||p.id)+'.png'; a.click(); };
+      const btnDelete = document.createElement('button'); btnDelete.innerHTML='🗑️ Delete'; btnDelete.onclick = ()=>{ if(!confirm('Delete this item?')) return; const all=getPaints(); const idx=all.findIndex(x=>x.id===p.id); if(idx>=0){ all.splice(idx,1); savePaints(all);} renderHistory(); };
+      menu.appendChild(btnView); menu.appendChild(btnRename); menu.appendChild(btnDownload); menu.appendChild(btnDelete);
+      card.appendChild(menu);
+      dots.addEventListener('click', ev=>{ ev.stopPropagation(); document.querySelectorAll('.menu').forEach(m=>m.style.display='none'); menu.style.display = menu.style.display==='flex' ? 'none' : 'flex'; menu.style.flexDirection='column'; });
+      grid.appendChild(card);
+    });
+  }
+
+  function renderGames(){
+    const grid = document.getElementById('gameDiscovery');
+    const games = getGames();
+    if(!games.length){ grid.innerHTML = '<div class="empty">No games yet.</div>'; return; }
+    grid.innerHTML = '';
+    games.forEach((g,i)=>{
+      const card = document.createElement('div'); card.className='card';
+      const title = document.createElement('div'); title.style.fontWeight='700'; title.textContent = g.title||'Untitled';
+      const by = document.createElement('div'); by.className='muted'; by.textContent = 'By '+(g.creator||'Unknown');
+      card.appendChild(title); card.appendChild(by);
+      const dots = document.createElement('button'); dots.className='dots'; dots.textContent='⋮';
+      card.appendChild(dots);
+      const menu = document.createElement('div'); menu.className='menu';
+      const play = document.createElement('button'); play.innerHTML='▶️ Play'; play.onclick = ()=>{ localStorage.setItem('selectedGame', i); location.href='test_game.html'; };
+      menu.appendChild(play);
+      const canManage = (g.creator === logged) || isOwner;
+      if(canManage){
+        const edit = document.createElement('button'); edit.innerHTML='📝 Edit'; edit.onclick = ()=>{ localStorage.setItem('editGameIndex', i); location.href='create_game.html'; };
+        const del = document.createElement('button'); del.innerHTML='❌ Delete'; del.onclick = ()=>{ if(!confirm('Delete this game?')) return; const all=getGames(); all.splice(i,1); saveGames(all); renderGames(); };
+        menu.appendChild(edit); menu.appendChild(del);
+      }
+      card.appendChild(menu);
+      dots.addEventListener('click', ev=>{ ev.stopPropagation(); document.querySelectorAll('.menu').forEach(m=>m.style.display='none'); menu.style.display = menu.style.display==='flex'?'none':'flex'; menu.style.flexDirection='column'; });
+      card.addEventListener('click', ev=>{ if(ev.target.closest('.dots')||ev.target.closest('.menu')) return; localStorage.setItem('selectedGame', i); location.href='test_game.html'; });
+      grid.appendChild(card);
+    });
+  }
+
+  function renderFriends(){
+    const div = document.getElementById('friendsOnline');
+    const accs = getAccounts();
+    if(!accs.length){ div.innerHTML = '<div class="empty">No users registered.</div>'; return; }
+    accs.sort((a,b)=>a.username.localeCompare(b.username));
+    div.innerHTML = '';
+    accs.forEach(a=>{
+      const card = document.createElement('div'); card.className='card';
+      const name = document.createElement('div'); name.style.fontWeight='700'; name.textContent = a.username + ((a.vip && a.vip.active)?' 👑':'');
+      const status = document.createElement('div'); status.className='muted'; status.textContent = 'Online';
+      card.appendChild(name); card.appendChild(status);
+      div.appendChild(card);
+    });
+  }
+
+  // close menus on outside click
+  document.addEventListener('click', ()=>{ document.querySelectorAll('.menu').forEach(m=>m.style.display='none'); });
+
+  // INITIALIZE
+  (function init(){
+    // ensure current user exists; if owner accounts don't have ET VIP yet, grant it automatically
+    const cur = ensureUser(logged);
+    if(!cur){ localStorage.removeItem('loggedInUser'); location.href='index.html'; return; }
+    if(isOwner && (!cur.vip || cur.vip.type !== 'ET')){
+      // grant ET vip for owner accounts automatically
+      cur.vip = { type:'ET', expires:null, active:true };
+      updateUser(cur);
+    }
+    refreshHeader(); renderHistory(); renderGames(); renderFriends();
+    window.refreshHomeHeader = refreshHeader;
+  })();
+</script>
+</body>
+</html>
