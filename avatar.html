@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Avatar — GameWorld</title>
+  <style>
+    body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#fff;color:#222;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding-top:24px}
+    header{width:100%;padding:12px 20px;border-bottom:1px solid #eee;background:#fafafa;display:flex;align-items:center}
+    .back{background:#eee;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .wrap{max-width:900px;width:100%;padding:20px;display:flex;gap:24px;align-items:flex-start}
+    .avatar-box{width:220px;height:220px;border:1px solid #eee;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fff}
+    #avatar{width:120px;height:120px;background:red;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center}
+    .editor{flex:1;background:#fff;border:1px solid #eee;padding:14px;border-radius:12px}
+    .colors{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+    .color{height:28px;border-radius:6px;cursor:pointer;border:1px solid #ddd}
+    .shapes{display:flex;gap:8px;margin-top:10px}
+    .shape{padding:8px;border-radius:8px;border:1px solid #ddd;cursor:pointer}
+    .accessories{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+    button{background:#0f3460;color:#fff;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <button class="back" onclick="goHome()">← Back</button>
+    <div style="margin-left:12px;font-weight:600" id="title">Avatar</div>
+  </header>
+
+  <div class="wrap">
+    <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
+      <div class="avatar-box">
+        <div id="avatar"></div>
+      </div>
+      <button onclick="toggleEditor()">Edit Avatar</button>
+    </div>
+
+    <div class="editor" id="editor" style="display:none">
+      <h3>Choose color</h3>
+      <div class="colors" id="colorGrid"></div>
+
+      <h3 style="margin-top:12px">Choose shape</h3>
+      <div class="shapes">
+        <div class="shape" onclick="setShape('circle')">Circle</div>
+        <div class="shape" onclick="setShape('square')">Square</div>
+        <div class="shape" onclick="setShape('triangle')">Triangle</div>
+        <div class="shape" onclick="setShape('star')">Star</div>
+        <div class="shape" onclick="setShape('heart')">Heart</div>
+      </div>
+
+      <h3 style="margin-top:12px">Accessories</h3>
+      <div class="accessories" id="accGrid"></div>
+
+      <div style="margin-top:12px">
+        <button onclick="saveAvatar()">Save Avatar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = localStorage.getItem('loggedInUser');
+    if(!user) location.href='index.html';
+    document.getElementById('title').textContent = `${user}'s Avatar`;
+    const avatarDiv = document.getElementById('avatar');
+    const editor = document.getElementById('editor');
+
+    // load avatar or default
+    let avatar = JSON.parse(localStorage.getItem('avatar_' + user) || 'null') || { color:'red', shape:'circle', accessory:null };
+    function render(){
+      avatarDiv.style.background = avatar.color;
+      avatarDiv.style.borderRadius = avatar.shape==='circle' ? '50%' : '12px';
+      avatarDiv.style.clipPath = 'none';
+      if(avatar.shape==='triangle') avatarDiv.style.clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)';
+      if(avatar.shape==='star') avatarDiv.style.clipPath = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+      if(avatar.shape==='heart') avatarDiv.style.clipPath = 'polygon(50% 88%, 90% 50%, 70% 10%, 50% 30%, 30% 10%, 10% 50%)';
+      avatarDiv.innerHTML = '';
+      if(avatar.accessory){
+        const img = document.createElement('img');
+        img.src = avatar.accessory; img.style.width='60px'; img.style.position='absolute'; img.style.top='-18px';
+        avatarDiv.appendChild(img);
+      }
+    }
+    render();
+
+    function toggleEditor(){ editor.style.display = editor.style.display==='none'?'block':'none'; }
+
+    // colors
+    const colorList = ['red','orange','yellow','green','blue','purple','pink','brown','gray','black','white','cyan'];
+    const cg = document.getElementById('colorGrid');
+    colorList.forEach(c=>{
+      const d=document.createElement('div'); d.className='color'; d.style.background=c; d.onclick=()=>{ avatar.color=c; render(); };
+      cg.appendChild(d);
+    });
+
+    function setShape(s){ avatar.shape = s; render(); }
+
+    // accessories: hat and candle (remote svg) plus user images from paintHistory
+    const accGrid = document.getElementById('accGrid');
+    const accessories = [
+      {name:'hat', src:'https://upload.wikimedia.org/wikipedia/commons/4/4e/Hat_icon.svg'},
+      {name:'candle', src:'https://upload.wikimedia.org/wikipedia/commons/5/5a/Candle_icon.svg'}
+    ];
+    const paints = JSON.parse(localStorage.getItem('paintHistory')||'[]');
+    paints.forEach(p=>accessories.push({name:'user',src:p}));
+
+    accessories.forEach(a=>{
+      const d=document.createElement('div'); d.style.width='64px'; d.style.height='64px'; d.style.border='1px solid #eee'; d.style.borderRadius='8px'; d.style.overflow='hidden'; d.style.cursor='pointer';
+      const img=document.createElement('img'); img.src=a.src; img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
+      d.appendChild(img); d.onclick=()=>{ avatar.accessory = a.src; render(); }; accGrid.appendChild(d);
+    });
+
+    function saveAvatar(){ localStorage.setItem('avatar_'+user, JSON.stringify(avatar)); alert('Avatar saved'); toggleEditor(); }
+
+    function goHome(){ location.href='home.html' }
+  </script>
+</body>
+</html>

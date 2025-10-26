@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Test Game — GameWorld</title>
+<style>
+  body{margin:0;font-family:Inter,Arial,sans-serif;background:#0b1220;color:#fff;overflow:hidden}
+  .screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .game-area{width:1000px;height:640px;background:linear-gradient(#e6f0ff,#f8fbff);border-radius:12px;position:relative;overflow:hidden;border:6px solid #0f3460}
+  .hud{position:absolute;left:12px;top:12px;color:#0f3460;font-weight:700}
+  .hud .lifebar{width:220px;height:16px;background:#fff;border-radius:8px;overflow:hidden;margin-top:6px;border:1px solid #ddd}
+  .lifebar .fill{height:100%;background:#e94560;width:50%}
+  .hint{position:absolute;right:12px;top:12px;color:#0f3460}
+  .obj{position:absolute;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;background:#fff;border:1px solid rgba(0,0,0,0.06);font-size:22px;cursor:default}
+  .player{position:absolute;width:40px;height:40px;border-radius:50%;background:red;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  .bullet{position:absolute;width:12px;height:12px;border-radius:50%;background:#111}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px}
+  .pauseBtn{position:absolute;left:12px;bottom:12px;padding:8px 12px;border-radius:8px;background:#fff;color:#0f3460;border:none;cursor:pointer}
+  .coin-count{position:absolute;left:260px;top:12px;color:#0f3460;font-weight:700}
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="game-area" id="gameArea" tabindex="0"></div>
+</div>
+
+<script>
+/* ---------- Utilities & storage helpers ---------- */
+function getGames(){ return JSON.parse(localStorage.getItem('games')||'[]'); }
+function getPaints(){ return JSON.parse(localStorage.getItem('paintHistory')||'[]'); }
+function getAccounts(){ return JSON.parse(localStorage.getItem('accounts')||'[]'); }
+function saveAccounts(a){ localStorage.setItem('accounts', JSON.stringify(a)); }
+function getCurrentUser(){ return localStorage.getItem('loggedInUser'); }
+function ensureUser(u){ if(!u) return null; const a=getAccounts(); const f=a.find(x=>x.username===u); return f || null; }
+function updateUserObj(user){ const a=getAccounts(); const i=a.findIndex(x=>x.username===user.username); if(i>=0){ a[i]=user; saveAccounts(a); } }
+
+/* ---------- Load game (temp or saved) ---------- */
+let game = null;
+const temp = JSON.parse(localStorage.getItem('tempTestGame') || 'null');
+if(temp){
+  game = temp;
+  // mark that we came from editor
+  var fromEditor = true;
+} else {
+  const idx = localStorage.getItem('selectedGame');
+  if(idx !== null && idx !== undefined){
+    const all = getGames();
+    const g = all[Number(idx)];
+    if(g) game = g;
+  }
+  var fromEditor = false;
+}
+if(!game){
+  alert('No game data to test.');
+  window.location.href = fromEditor ? 'create_game.html' : 'home.html';
+}
+
+/* ---------- Game state ---------- */
+const area = document.getElementById('gameArea');
+const W = area.clientWidth;
+const H = area.clientHeight;
+let objects = []; // runtime objects { id, kind, x, y, el, extra, vx, vy }
+let player = { x: W/2 - 20, y: H/2 - 20, el: null, speed: 6, healthMax: 100, health: 100, hasGun: false };
+let bullets = []; // { x,y,vx,vy,el, owner }
+let lastTime = performance.now();
+let running = true;
+let coinsCollectedThisSession = 0;
+
+/* Initialize UI values */
+const uiCfg = game.ui || { lifebar:50, joystick:false, pauseButton:false };
+const lifebarPct = Math.max(1, Math.min(Number(uiCfg.lifebar)||50, 1000)); // editor may set up to 1000
+// scale lifebar to 100 for gameplay (we will map)
+player.healthMax = Math.min(1000, Math.max(10, lifebarPct)); // limit
+player.health = player.healthMax * 0.5; // start 50% as requested
+
+/* HUD */
+const hud = document.createElement('div'); hud.className='hud';
+hud.innerHTML = `<div id="title">${game.title || 'Test Game'}</div>
+  <div style="margin-top:6px">By: ${game.creator||'Unknown'}</div>
+  <div class="lifebar" id="lifebar"><div class="fill" id="lifeFill" style="width:50%"></div></div>`;
+area.appendChild(hud);
+
+const coinCountEl = document.createElement('div'); coinCountEl.className='coin-count'; coinCountEl.textContent = '💰 +0';
+area.appendChild(coinCountEl);
+
+/* Pause overlay if pause button exists */
+let pauseOverlay = null;
+if(uiCfg.pauseButton){
+  const pauseBtn = document.createElement('button'); pauseBtn.className='pauseBtn'; pauseBtn.textContent='Pause';
+  pauseBtn.onclick = ()=> togglePause();
+  area.appendChild(pauseBtn);
+  pauseOverlay = document.createElement('div'); pauseOverlay.className='overlay'; pauseOverlay.style.display='none'; pauseOverlay.innerText = 'Paused';
+  area.appendChild(pauseOverlay);
+}
+
+/* Player element */
+const pEl = document.createElement('div'); pEl.className='player'; pEl.style.left = player.x + 'px'; pEl.style.top = player.y + 'px'; pEl.textContent = '';
+area.appendChild(pEl);
+player.el = pEl;
+
+/* Camera follow: we keep the player in view — since area is fixed, we simulate by keeping player inside bounds */
+const cameraFollow = !!game.cameraFollow;
+
+/* ---------- Load game items into runtime objects ---------- */
+function addObjectRuntime(it){
+  const el = document.createElement('div'); el.className='obj'; el.style.left = it.x + 'px'; el.style.top = it.y + 'px';
+  el.innerHTML = kindEmoji(it.kind);
+  el.dataset.id = it.id;
+  area.appendChild(el);
+  const rt = {
+    id: it.id,
+    kind: it.kind,
+    x: it.x,
+    y: it.y,
+    el: el,
+    extra: it.extra || {},
+    vx: 0, vy: 0
+  };
+  objects.push(rt);
+  return rt;
+}
+
+/* Emoji representation */
+function kindEmoji(k){
+  switch(k){
+    case 'tree': return '🌳';
+    case 'diamond': return '💎';
+    case 'ghost': return '👻';
+    case 'gun': return '🔫';
+    case 'teleport': return '🌀';
+    case 'productImage': return '🖼️';
+    default: return '❓';
+  }
+}
+
+/* Create runtime objects from editor items */
+(game.items||[]).forEach(it=> addObjectRuntime(it));
+
+/* find first spawn or create one */
+let spawnFound = objects.find(o=> o.kind === 'spawn');
+if(!spawnFound){
+  // spawn block not provided — check for spawn-kind in game.items: editor might use 'spawn' named object; else we center player
+  // If editor placed spawn as an item with kind 'spawn' it will have been added
+  // For backward compat, we place at center
+  player.x = W/2 - 20; player.y = H/2 - 20;
+} else {
+  player.x = spawnFound.x; player.y = spawnFound.y;
+}
+player.el.style.left = player.x + 'px'; player.el.style.top = player.y + 'px';
+
+/* ---------- Helpers for collisions ---------- */
+function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){
+  return !(ax+aw < bx || ax > bx+bw || ay+ah < by || ay > by+bh);
+}
+
+/* ---------- Update loop ---------- */
+function update(dt){
+  if(!running) return;
+  // Ghost behavior: move toward player
+  objects.forEach(o=>{
+    if(o.kind === 'ghost'){
+      const dx = (player.x + 20) - (o.x + 22);
+      const dy = (player.y + 20) - (o.y + 22);
+      const dist = Math.hypot(dx,dy) || 1;
+      const speed = (o.extra && o.extra.speed) ? Number(o.extra.speed) : 0.8;
+      const vx = (dx / dist) * speed * (dt*0.06);
+      const vy = (dy / dist) * speed * (dt*0.06);
+      o.x += vx; o.y += vy;
+      o.el.style.left = Math.round(o.x) + 'px';
+      o.el.style.top = Math.round(o.y) + 'px';
+      // collision with player damages
+      if(rectsOverlap(player.x,player.y,40,40,o.x,o.y,44,44)){
+        const dmg = (o.extra && o.extra.damage) ? Number(o.extra.damage) : 5;
+        // apply damage with simple cooldown
+        if(!o._lastHit || (performance.now() - o._lastHit) > 600){
+          player.health -= dmg;
+          o._lastHit = performance.now();
+          updateLife();
+          if(player.health <= 0) handlePlayerDeath();
+        }
+      }
+    }
+    // diamond static - check pickup
+    if(o.kind === 'diamond'){
+      if(rectsOverlap(player.x,player.y,40,40,o.x,o.y,44,44)){
+        // collect diamond
+        const value = (o.extra && o.extra.value) ? Number(o.extra.value) : 10;
+        collectCoins(value);
+        // remove diamond
+        o.el.remove();
+        objects = objects.filter(x => x.id !== o.id);
+      }
+    }
+    // gun pickup
+    if(o.kind === 'gun'){
+      if(rectsOverlap(player.x,player.y,40,40,o.x,o.y,44,44)){
+        player.hasGun = true;
+        // indicate pickup: remove gun object
+        o.el.remove();
+        objects = objects.filter(x => x.id !== o.id);
+        showTempMsg('Gun picked up! Click anywhere to shoot.');
+      }
+    }
+    // teleport: on touch move to pair
+    if(o.kind === 'teleport'){
+      if(rectsOverlap(player.x,player.y,40,40,o.x,o.y,44,44)){
+        // find nearest other teleport to pair (exclude self)
+        const others = objects.filter(xx=>xx.kind==='teleport' && xx.id !== o.id);
+        if(others.length){
+          const target = others[0];
+          player.x = target.x;
+          player.y = target.y;
+          player.el.style.left = player.x + 'px'; player.el.style.top = player.y + 'px';
+        }
+      }
+    }
+  });
+
+  // bullets movement & collision with ghosts
+  bullets.forEach(b=>{
+    b.x += b.vx * dt * 0.06;
+    b.y += b.vy * dt * 0.06;
+    if(b.el) { b.el.style.left = Math.round(b.x) + 'px'; b.el.style.top = Math.round(b.y) + 'px'; }
+    // collisions
+    objects.forEach(o=>{
+      if(o.kind === 'ghost'){
+        if(rectsOverlap(b.x,b.y,12,12,o.x,o.y,44,44)){
+          // hit ghost
+          const dmg = b.damage || 20;
+          // mark destroyed: remove ghost element and object
+          o.el.remove();
+          objects = objects.filter(x=>x.id !== o.id);
+          // remove bullet
+          if(b.el) b.el.remove();
+          bullets = bullets.filter(bb => bb !== b);
+        }
+      }
+    });
+    // remove bullets out of bounds
+    if(b.x < -50 || b.x > area.clientWidth+50 || b.y < -50 || b.y > area.clientHeight+50){
+      if(b.el) b.el.remove();
+      bullets = bullets.filter(bb=>bb!==b);
+    }
+  });
+
+  // camera follow: (we keep player inside area; nothing to do for fixed viewport)
+  // update player element position
+  player.el.style.left = Math.round(player.x) + 'px';
+  player.el.style.top = Math.round(player.y) + 'px';
+}
+
+/* ---------- Render / tick ---------- */
+function tick(now){
+  const dt = now - lastTime;
+  lastTime = now;
+  update(dt);
+  if(running) requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* ---------- Controls: keyboard & click to shoot ---------- */
+const keys = {};
+window.addEventListener('keydown', (e)=>{ keys[e.key.toLowerCase()] = true; if(e.key === 'Escape'){ // exit
+  if(fromEditor) { localStorage.removeItem('tempTestGame'); localStorage.removeItem('testFrom'); location.href='create_game.html'; }
+  else { location.href='home.html'; } }});
+window.addEventListener('keyup', (e)=>{ keys[e.key.toLowerCase()] = false; });
+
+function handleMovement(){
+  if(!running) return;
+  let moved=false;
+  let speed = player.speed;
+  if(keys['w'] || keys['arrowup']){ player.y -= speed; moved=true; }
+  if(keys['s'] || keys['arrowdown']){ player.y += speed; moved=true; }
+  if(keys['a'] || keys['arrowleft']){ player.x -= speed; moved=true; }
+  if(keys['d'] || keys['arrowright']){ player.x += speed; moved=true; }
+  // clamp
+  player.x = Math.max(0, Math.min(area.clientWidth - 40, player.x));
+  player.y = Math.max(0, Math.min(area.clientHeight - 40, player.y));
+  // call again
+  requestAnimationFrame(handleMovement);
+}
+requestAnimationFrame(handleMovement);
+
+/* Click / tap to shoot if player has gun */
+area.addEventListener('click', (e)=>{
+  if(!player.hasGun) return;
+  // compute normalized direction towards click
+  const rect = area.getBoundingClientRect();
+  const px = player.x + 20; const py = player.y + 20;
+  const tx = e.clientX - rect.left; const ty = e.clientY - rect.top;
+  const dx = tx - px, dy = ty - py;
+  const dist = Math.hypot(dx,dy) || 1;
+  const speed = 12; // bullet speed
+  const vx = (dx/dist) * speed;
+  const vy = (dy/dist) * speed;
+  spawnBullet(px-6, py-6, vx, vy, { damage: 30 });
+});
+
+/* spawn bullet */
+function spawnBullet(x,y,vx,vy,opts){
+  const bEl = document.createElement('div'); bEl.className='bullet'; bEl.style.left = x + 'px'; bEl.style.top = y + 'px';
+  area.appendChild(bEl);
+  const b = { x, y, vx, vy, el: bEl, damage: opts.damage || 20 };
+  bullets.push(b);
+}
+
+/* ---------- life & coin management ---------- */
+function updateLife(){
+  const fill = document.getElementById('lifeFill');
+  const pct = Math.max(0, Math.min(1, player.health / player.healthMax));
+  fill.style.width = Math.round(pct*100) + '%';
+  if(player.health <= 0) handlePlayerDeath();
+}
+
+function handlePlayerDeath(){
+  running = false;
+  // small overlay
+  const ov = document.createElement('div'); ov.className='overlay'; ov.style.display='flex'; ov.innerText = 'You died — returning home...';
+  area.appendChild(ov);
+  setTimeout(()=>{ if(fromEditor){ localStorage.removeItem('tempTestGame'); location.href='create_game.html'; } else { location.href='home.html'; } }, 1600);
+}
+
+/* collect coins from diamond */
+function collectCoins(amount){
+  coinsCollectedThisSession += amount;
+  coinCountEl.textContent = '💰 +' + coinsCollectedThisSession;
+  // persist to account
+  const cur = ensureUser(getCurrentUser());
+  if(cur){ cur.coins = (cur.coins||0) + amount; updateUserObj(cur); /* update header on other pages when they refresh/call */ }
+}
+
+/* show temporary on-screen message */
+function showTempMsg(t){
+  const msg = document.createElement('div'); msg.className='overlay'; msg.style.background='rgba(0,0,0,0.65)'; msg.style.fontSize='16px'; msg.innerText = t;
+  area.appendChild(msg);
+  setTimeout(()=>{ msg.remove(); }, 900);
+}
+
+/* ---------- Pause control ---------- */
+function togglePause(){
+  running = !running;
+  if(running){ pauseOverlay && (pauseOverlay.style.display='none'); lastTime = performance.now(); requestAnimationFrame(tick); } else { pauseOverlay && (pauseOverlay.style.display='flex'); }
+}
+
+/* ---------- Utils: convert editor objects to runtime positions ---------- */
+/* On load we already created runtime objects. Now we also create spawn or initial items. */
+function spawnRuntimeFromObjects(){
+  // Already created in addObjectRuntime; objects[] contains runtime objects.
+  // Place objects into area (their element already appended).
+  objects.forEach(o=>{
+    o.el.style.left = o.x + 'px'; o.el.style.top = o.y + 'px';
+  });
+}
+spawnRuntimeFromObjects();
+
+/* ---------- Start loop & small interval checks ---------- */
+function mainLoop(){
+  // update dt handled in tick; this loop used to do small checks (e.g., pickups)
+  updateLife(); // ensure lifebar shown
+  // schedule next
+  if(running) setTimeout(mainLoop, 200);
+}
+mainLoop();
+
+/* ---------- Exit on ESC (already handled), ensure Esc behaviour when from editor or home ---------- */
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape'){ if(fromEditor){ localStorage.removeItem('tempTestGame'); localStorage.removeItem('testFrom'); location.href='create_game.html'; } else { location.href='home.html'; } } });
+
+/* ---------- Clean up tempTestGame if coming from editor on unload ---------- */
+window.addEventListener('beforeunload', ()=>{ if(fromEditor) { localStorage.removeItem('tempTestGame'); localStorage.removeItem('testFrom'); } });
+
+</script>
+</body>
+</html>

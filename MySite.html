@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Stuff - Paint</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: white;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button, .color {
+      padding: 10px 15px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      background-color: #533483;
+    }
+
+    .color {
+      width: 30px;
+      height: 30px;
+      border: 2px solid white;
+    }
+
+    canvas {
+      border: 3px solid white;
+      border-radius: 10px;
+      background: white;
+    }
+
+    .back {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background-color: #e94560;
+      color: white;
+    }
+
+    .back:hover {
+      background-color: #ff5c7a;
+    }
+  </style>
+</head>
+<body>
+  <button class="back" onclick="goBack()">← Home</button>
+  <h1>Create Stuff 🎨</h1>
+
+  <div class="toolbar">
+    <div id="colors"></div>
+    <button onclick="setTool('fill')">🪣 Fill</button>
+    <button onclick="setTool('erase')">🩹 Eraser</button>
+    <button onclick="undo()">↩️ Undo</button>
+    <button onclick="save()">💾 Save</button>
+  </div>
+
+  <canvas id="paint" width="600" height="400"></canvas>
+
+  <script>
+    const canvas = document.getElementById("paint");
+    const ctx = canvas.getContext("2d");
+    let drawing = false;
+    let tool = "draw";
+    let color = "#000";
+    let history = [];
+
+    // Colors
+    const colorChoices = ["#000000","#ffffff","#ff0000","#00ff00","#0000ff",
+                          "#ffff00","#ff00ff","#00ffff","#ffa500","#8b4513",
+                          "#808080","#4b0082"];
+    const colorBox = document.getElementById("colors");
+    colorChoices.forEach(c=>{
+      const div=document.createElement("div");
+      div.className="color";
+      div.style.background=c;
+      div.onclick=()=>{ color=c; tool="draw"; };
+      colorBox.appendChild(div);
+    });
+
+    // Draw functions
+    canvas.addEventListener("mousedown", e => {
+      drawing = true;
+      ctx.beginPath();
+      ctx.moveTo(e.offsetX, e.offsetY);
+    });
+    canvas.addEventListener("mousemove", e => {
+      if(!drawing) return;
+      if(tool === "erase") ctx.strokeStyle = "#ffffff";
+      else ctx.strokeStyle = color;
+      ctx.lineWidth = 5;
+      ctx.lineTo(e.offsetX, e.offsetY);
+      ctx.stroke();
+    });
+    canvas.addEventListener("mouseup", () => {
+      drawing = false;
+      saveHistory();
+    });
+
+    function setTool(t) { tool = t; }
+    function undo() {
+      if (history.length > 0) {
+        const last = history.pop();
+        const img = new Image();
+        img.src = last;
+        img.onload = () => ctx.drawImage(img, 0, 0);
+      }
+    }
+
+    function saveHistory() {
+      history.push(canvas.toDataURL());
+      if (history.length > 10) history.shift();
+    }
+
+    function save() {
+      const imgData = canvas.toDataURL();
+      const stored = JSON.parse(localStorage.getItem("paintHistory")) || [];
+      stored.push(imgData);
+      localStorage.setItem("paintHistory", JSON.stringify(stored));
+      alert("Saved! Returning to home.");
+      window.location.href = "home.html";
+    }
+
+    function goBack() {
+      window.location.href = "home.html";
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>View Item — GameWorld</title>
+<style>
+  body{margin:0;font-family:Inter,Arial,sans-serif;background:#fff;color:#222}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #eee;background:#fafafa}
+  .container{max-width:900px;margin:24px auto;padding:18px}
+  .card{background:#fbfbfb;border:1px solid #eee;border-radius:10px;padding:12px}
+  .thumb{max-width:100%;border-radius:8px;display:block;margin:0 auto}
+  .muted{color:#666}
+  button{background:#0f3460;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <div style="font-weight:700">View Item</div>
+  <div><button onclick="goHome()">Back</button></div>
+</header>
+<main class="container">
+  <div id="content" class="card"></div>
+</main>
+
+<script>
+  function getProducts(){ return JSON.parse(localStorage.getItem('products')||'[]'); }
+  function getPaints(){ return JSON.parse(localStorage.getItem('paintHistory')||'[]'); }
+  function getAccounts(){ return JSON.parse(localStorage.getItem('accounts')||'[]'); }
+  function getCurrentUser(){ return localStorage.getItem('loggedInUser'); }
+  function updateUserObj(user){ const a=getAccounts(); const i=a.findIndex(x=>x.username===user.username); if(i>=0){ a[i]=user; localStorage.setItem('accounts', JSON.stringify(a)); } }
+  function goHome(){ location.href='home.html' }
+  function uid(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if(!id) { document.getElementById('content').innerText = 'No item specified.'; }
+  else{
+    const all = getProducts().concat(getPaints());
+    const item = all.find(x=>x.id===id);
+    if(!item) return document.getElementById('content').innerText='Item not found.';
+    const owner = item.owner;
+    const cur = getCurrentUser();
+    const me = getAccounts().find(a=>a.username===cur);
+    // render
+    const c = document.getElementById('content');
+    c.innerHTML = `<h2>${item.name}</h2><img class="thumb" src="${item.dataUrl}" alt="${item.name}"><div style="margin-top:8px"><div class="muted">By ${owner}</div></div>`;
+    // actions
+    const actionRow = document.createElement('div'); actionRow.style.marginTop='12px';
+    if(item.price){
+      // product for sale
+      const buy = document.createElement('button'); buy.textContent='Buy';
+      buy.onclick = ()=>{
+        if((me.coins||0) < item.price){ return alert('Not enough coins'); }
+        me.coins = (me.coins||0) - item.price; updateUserObj(me);
+        // add to buyer paints
+        const paints = getPaints(); paints.push({ id:'own_'+uid(), owner:me.username, name:item.name, dataUrl:item.dataUrl, createdAt: new Date().toISOString() }); localStorage.setItem('paintHistory', JSON.stringify(paints));
+        alert('Bought and added to your History Library');
+        location.href='home.html';
+      };
+      actionRow.appendChild(buy);
+    }
+    // if owner, show rename/delete
+    if(cur === owner || ['Airulmsyah','AMS','Ams09'].includes(cur)){
+      const ren = document.createElement('button'); ren.style.marginLeft='8px'; ren.textContent='Rename';
+      ren.onclick = ()=>{ const nn = prompt('Rename item', item.name||''); if(nn!==null){ item.name = nn || item.name; // persist
+          // update in products or paints
+          const prods = getProducts(); const pidx = prods.findIndex(x=>x.id===item.id);
+          if(pidx>=0){ prods[pidx]=item; saveProducts(prods); } else { const ps = getPaints(); const pi=ps.findIndex(x=>x.id===item.id); if(pi>=0){ ps[pi]=item; localStorage.setItem('paintHistory', JSON.stringify(ps)); } }
+          alert('Renamed'); location.reload(); } };
+      actionRow.appendChild(ren);
+      const del = document.createElement('button'); del.style.marginLeft='8px'; del.textContent='Delete';
+      del.onclick = ()=>{ if(!confirm('Delete item?')) return; // remove from both lists
+        let prods = getProducts(); prods = prods.filter(x=>x.id!==item.id); saveProducts(prods);
+        let ps = getPaints(); ps = ps.filter(x=>x.id!==item.id); localStorage.setItem('paintHistory', JSON.stringify(ps));
+        alert('Deleted'); location.href='home.html';
+      };
+      actionRow.appendChild(del);
+    }
+    c.appendChild(actionRow);
+  }
+</script>
+</body>
+</html>

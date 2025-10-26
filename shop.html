@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shop — GameWorld</title>
+<style>
+  :root{--accent:#0f3460}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,Arial,sans-serif;background:#fff;color:#222}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #eee;background:#fafafa}
+  .nav{display:flex;gap:8px;align-items:center}
+  .container{max-width:1100px;margin:24px auto;padding:0 18px}
+  .search{display:flex;gap:8px;margin-bottom:12px}
+  input[type=text]{flex:1;padding:8px;border:1px solid #ddd;border-radius:8px}
+  .grid{display:flex;flex-wrap:wrap;gap:16px}
+  .card{width:220px;padding:12px;border-radius:10px;background:#fbfbfb;border:1px solid #eee;position:relative}
+  .thumb{width:100%;height:120px;object-fit:cover;border-radius:8px}
+  .price{font-weight:700;margin-top:6px}
+  .buy{background:#27ae60;color:#fff;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .muted{color:#666;font-size:13px}
+  .smallmenu{position:absolute;top:8px;right:8px;background:none;border:none;font-size:16px;cursor:pointer}
+  .menu{position:absolute;top:36px;right:8px;background:#fff;border:1px solid #eee;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.08);display:none;flex-direction:column;min-width:160px;z-index:50}
+  .menu button{background:none;border:none;padding:10px 12px;text-align:left;cursor:pointer;color:#222}
+  .menu button:hover{background:#f3f4f6}
+</style>
+</head>
+<body>
+<header>
+  <div style="font-weight:700">GameWorld Shop</div>
+  <div class="nav">
+    <button onclick="goHome()">Home</button>
+    <button onclick="goCreate()">Create</button>
+    <button onclick="goFriends()">Friends</button>
+    <div id="coinDisplay">💰 Coins: 0</div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="search">
+    <input id="q" placeholder="Search by name or creator" oninput="renderProducts()" />
+    <button onclick="renderProducts()">Search</button>
+  </div>
+
+  <div id="productsGrid" class="grid"></div>
+</main>
+
+<script>
+  function getProducts(){ return JSON.parse(localStorage.getItem('products')||'[]'); }
+  function saveProducts(p){ localStorage.setItem('products', JSON.stringify(p)); }
+  function getAccounts(){ return JSON.parse(localStorage.getItem('accounts')||'[]'); }
+  function getCurrentUser(){ return localStorage.getItem('loggedInUser'); }
+  function ensureUser(u){ if(!u) return null; const a=getAccounts(); const f=a.find(x=>x.username===u); if(f){ if(typeof f.coins!=='number') f.coins=Number(f.coins||0); if(!f.friends) f.friends=[]; if(!f.vip) f.vip=null; return f;} return null;}
+  function updateUserObj(user){ const a=getAccounts(); const i=a.findIndex(x=>x.username===user.username); if(i>=0){ a[i]=user; localStorage.setItem('accounts', JSON.stringify(a)); } }
+
+  function goHome(){ location.href='home.html' }
+  function goCreate(){ location.href='create.html' }
+  function goFriends(){ location.href='friends.html' }
+
+  const current = getCurrentUser();
+  if(!current) location.href='index.html';
+  const me = ensureUser(current);
+  document.getElementById('coinDisplay').textContent = `💰 Coins: ${me.coins||0}`;
+  window.refreshHomeHeader = ()=>{ const cur = ensureUser(getCurrentUser()); if(cur) document.getElementById('coinDisplay').textContent = `💰 Coins: ${cur.coins||0}`; };
+
+  function uid(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+
+  function renderProducts(){
+    const grid = document.getElementById('productsGrid');
+    const q = (document.getElementById('q').value||'').toLowerCase();
+    const products = getProducts().slice().reverse();
+    const accounts = getAccounts();
+    const list = products.filter(p=>{
+      if(p.visibility === 'Friends'){
+        const owner = accounts.find(a=>a.username===p.owner);
+        if(!owner) return false;
+        if(!owner.friends || !owner.friends.includes(current)) return false;
+      }
+      if(!q) return true;
+      return (p.name||'').toLowerCase().includes(q) || (p.owner||'').toLowerCase().includes(q);
+    });
+    if(!list.length){ grid.innerHTML = '<div class="muted">No products found.</div>'; return; }
+    grid.innerHTML = '';
+    list.forEach(p=>{
+      const card = document.createElement('div'); card.className='card';
+      const img = document.createElement('img'); img.src=p.dataUrl; img.className='thumb';
+      card.appendChild(img);
+      const title = document.createElement('div'); title.style.marginTop='8px'; title.textContent = p.name;
+      const owner = document.createElement('div'); owner.className='muted'; owner.textContent = 'By ' + p.owner + ((p.visibility==='Friends')?' (Friends)':'');
+      const price = document.createElement('div'); price.className='price'; price.textContent = p.price + ' coins';
+      const buy = document.createElement('button'); buy.className='buy'; buy.textContent='Buy'; buy.onclick = ()=> buyProduct(p.id);
+      // small menu
+      const small = document.createElement('button'); small.className='smallmenu'; small.textContent='⋮';
+      const menu = document.createElement('div'); menu.className='menu';
+      const viewBtn = document.createElement('button'); viewBtn.innerHTML='👁️ View'; viewBtn.onclick = ()=> location.href='view_item.html?id='+p.id;
+      const buyBtn = document.createElement('button'); buyBtn.innerHTML='🟩 Buy'; buyBtn.onclick = ()=> buyProduct(p.id);
+      menu.appendChild(viewBtn); menu.appendChild(buyBtn);
+      card.appendChild(small); card.appendChild(menu);
+      small.addEventListener('click', ev=>{ ev.stopPropagation(); document.querySelectorAll('.menu').forEach(m=>m.style.display='none'); menu.style.display = menu.style.display==='flex'?'none':'flex'; menu.style.flexDirection='column'; });
+      card.appendChild(title); card.appendChild(owner); card.appendChild(price); card.appendChild(buy);
+      grid.appendChild(card);
+    });
+  }
+
+  function buyProduct(id){
+    const products = getProducts(); const p = products.find(x=>x.id===id);
+    if(!p) return alert('Product not found');
+    const me = ensureUser(getCurrentUser());
+    if((me.coins||0) < p.price) return alert('Not enough coins');
+    me.coins = (me.coins||0) - p.price; updateUserObj(me);
+    // add copy to buyer's history
+    const paints = JSON.parse(localStorage.getItem('paintHistory')||'[]');
+    paints.push({ id: 'own_'+uid(), owner: me.username, name: p.name, dataUrl: p.dataUrl, createdAt: new Date().toISOString() });
+    localStorage.setItem('paintHistory', JSON.stringify(paints));
+    alert('Purchase successful — item added to your History Library.');
+    // update coin displays
+    window.refreshHomeHeader && window.refreshHomeHeader();
+    document.getElementById('coinDisplay').textContent = `💰 Coins: ${me.coins||0}`;
+  }
+
+  // close menus when clicking outside
+  document.addEventListener('click', ()=>{ document.querySelectorAll('.menu').forEach(m=>m.style.display='none'); });
+
+  renderProducts();
+</script>
+</body>
+</html>

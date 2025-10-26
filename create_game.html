@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Game Editor — Create Game</title>
+<style>
+  :root{--accent:#0f3460;--accentHover:#533483}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#fff;color:#222;min-height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eee;background:#fafafa}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--accent)}
+  .console-icon{width:36px;height:36px;border-radius:8px;background:#e9eef9;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent)}
+  main{display:flex;gap:16px;padding:16px;max-width:1400px;margin:18px auto}
+  /* left toolbox */
+  .toolbox{width:240px;border:1px solid #eee;border-radius:10px;padding:12px;background:#fbfbfb}
+  .toolbox h3{margin:4px 0 10px}
+  .tool-btn{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:#fff;border:1px solid #e6e6e6;cursor:pointer;margin-bottom:8px}
+  .tool-btn.selected{outline:3px solid rgba(15,52,96,0.08);background:#f0f6ff}
+  .tool-emoji{font-size:22px}
+  .section{margin-top:12px}
+  /* center workspace */
+  .workspace-wrap{flex:1;display:flex;flex-direction:column;gap:12px}
+  .toolbar{display:flex;align-items:center;gap:8px}
+  .workspace{flex:1;border:1px solid #e8e8e8;border-radius:8px;background:linear-gradient(#fff,#fbfbff);min-height:520px;position:relative;overflow:auto}
+  .grid-dot{position:absolute;pointer-events:none}
+  /* placed objects */
+  .obj{position:absolute;display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:10px;background:#fff;border:1px solid #ddd;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04)}
+  .obj .big{font-size:26px}
+  .obj.selected{outline:3px solid rgba(15,52,96,0.12)}
+  /* spawn marker */
+  .spawn-mark{width:20px;height:20px;border-radius:4px;background:#0ea5a4;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+  /* right panel */
+  .panel{width:360px;border:1px solid #eee;border-radius:10px;padding:12px;background:#fbfbfb}
+  .panel h3{margin:4px 0 10px}
+  .field{margin-bottom:10px}
+  label{display:block;font-weight:600;margin-bottom:5px;font-size:13px}
+  input[type=text], input[type=number], select{width:100%;padding:8px;border-radius:8px;border:1px solid #ddd}
+  input[type=range]{width:100%}
+  .small{font-size:13px;color:#666}
+  .controls{display:flex;gap:8px;margin-top:8px}
+  .btn{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+  .btn.secondary{background:#fff;color:var(--accent);border:1px solid #ddd}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:120}
+  .modal .box{background:#fff;padding:16px;border-radius:10px;width:560px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><div class="console-icon">▦</div><div>Create Game — Studio</div></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <div class="small muted" id="currentUser">User</div>
+    <button class="btn secondary" onclick="goHome()">Back</button>
+  </div>
+</header>
+
+<main>
+  <!-- Toolbox -->
+  <aside class="toolbox">
+    <h3>Toolbox</h3>
+
+    <!-- compulsory tools -->
+    <div class="small" style="margin-bottom:6px;color:#666">Essential</div>
+    <div class="tool-btn" data-kind="spawn" id="toolSpawn" title="Spawn Adder (player spawn)"> <div class="tool-emoji">⬤</div><div style="flex:1">Spawn Adder</div></div>
+    <div class="tool-btn" data-kind="block" id="toolBlock" title="Gray Square (Generic Block)"> <div class="tool-emoji">▦</div><div style="flex:1">Gray Block</div></div>
+    <div class="tool-btn" data-kind="sprint" id="toolSprint" title="Sprint Block (double speed)"> <div class="tool-emoji">⚡</div><div style="flex:1">Sprint Block</div></div>
+
+    <hr>
+
+    <div class="small" style="margin-bottom:6px;color:#666">World Items</div>
+    <div class="tool-btn" data-kind="tree" id="toolTree" title="Tree (🌳)"><span class="tool-emoji">🌳</span><div style="flex:1">Tree</div></div>
+    <div class="tool-btn" data-kind="diamond" id="toolDiamond" title="Diamond (💎)"><span class="tool-emoji">💎</span><div style="flex:1">Diamond</div></div>
+    <div class="tool-btn" data-kind="ghost" id="toolGhost" title="Ghost (👻)"><span class="tool-emoji">👻</span><div style="flex:1">Ghost</div></div>
+    <div class="tool-btn" data-kind="gun" id="toolGun" title="Gun (🔫)"><span class="tool-emoji">🔫</span><div style="flex:1">Gun</div></div>
+    <div class="tool-btn" data-kind="teleport" id="toolTeleport" title="Teleport (🌀)"><span class="tool-emoji">🌀</span><div style="flex:1">Teleport</div></div>
+
+    <div class="section">
+      <h3>UI & Interface</h3>
+      <div class="field">
+        <label>Lifebar (default 50)</label>
+        <input id="lifebarInput" type="number" min="1" max="1000" value="50">
+        <div class="small muted">Editor can set up to 1000%</div>
+      </div>
+      <div class="field">
+        <label>Joystick (mobile)</label>
+        <select id="joystickSelect"><option value="false">Disabled</option><option value="true">Enabled</option></select>
+      </div>
+      <div class="field">
+        <label>Pause Button</label>
+        <select id="pauseSelect"><option value="false">Disabled</option><option value="true">Enabled</option></select>
+      </div>
+      <div class="field">
+        <label>Import Product Image</label>
+        <button class="btn secondary" onclick="openProductPicker()">Choose from History</button>
+        <div id="pickedProduct" class="small muted"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Game Settings</h3>
+      <div class="field">
+        <label>Visibility</label>
+        <select id="visibility"><option>Public</option><option>VIP only</option><option>Friends only</option></select>
+      </div>
+      <div class="field">
+        <label>Server Type</label>
+        <select id="serverType"><option>Singleplayer</option><option>Multiplayer</option><option>Open World</option></select>
+      </div>
+      <div class="field">
+        <label>Lighting (1-24)</label>
+        <input id="lighting" type="range" min="1" max="24" value="12" oninput="document.getElementById('lightingVal').textContent=this.value">
+        <div class="small muted">Time of day: <span id="lightingVal">12</span></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Workspace -->
+  <section class="workspace-wrap">
+    <div class="toolbar">
+      <button class="btn" onclick="saveGame(false)">Save (Publish)</button>
+      <button class="btn" onclick="saveDraft()">Save Draft</button>
+      <button class="btn" onclick="testGame()">Test Game</button>
+      <button class="btn secondary" onclick="clearWorkspace()">Clear Workspace</button>
+      <div style="flex:1"></div>
+      <div class="small muted">Click a toolbox item, then click the workspace to place it. Drag placed objects to move.</div>
+    </div>
+
+    <div class="workspace" id="workspace" tabindex="0"></div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <div class="small muted">World Width %</div>
+      <input id="worldWidth" type="range" min="0" max="100" value="50" oninput="document.getElementById('worldWidthVal').textContent=this.value+'%'">
+      <div id="worldWidthVal">50%</div>
+      <label style="margin-left:12px"><input type="checkbox" id="cameraFollow"> Camera follow player</label>
+    </div>
+  </section>
+
+  <!-- Right panel -->
+  <aside class="panel">
+    <h3>Selected Object</h3>
+    <div id="selectedInfo" class="muted">No object selected</div>
+
+    <div class="section">
+      <h3>World Settings</h3>
+      <div class="field">
+        <label>Game Title</label>
+        <input id="gameTitle" placeholder="My Awesome Game">
+      </div>
+      <div class="field">
+        <label>Genre</label>
+        <input id="gameGenre" placeholder="Adventure">
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Object Properties</h3>
+      <div class="field">
+        <label>Object ID</label>
+        <input id="propId" readonly>
+      </div>
+      <div class="field">
+        <label>Kind</label>
+        <input id="propKind" readonly>
+      </div>
+      <div class="field">
+        <label>X (px)</label>
+        <input id="propX" type="number" oninput="updateSelectedProp('x',this.value)">
+      </div>
+      <div class="field">
+        <label>Y (px)</label>
+        <input id="propY" type="number" oninput="updateSelectedProp('y',this.value)">
+      </div>
+      <div class="field">
+        <label>Extra (JSON)</label>
+        <input id="propExtra" onblur="applyExtraJson()" placeholder='e.g. {"damage":10,"speed":2}'>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="deleteSelected()">Delete</button>
+        <button class="btn secondary" onclick="deselect()">Deselect</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- product picker modal -->
+<div class="modal" id="productModal">
+  <div class="box">
+    <h3>Choose Product Image</h3>
+    <div id="productList" style="display:flex;flex-wrap:wrap;gap:8px;max-height:320px;overflow:auto"></div>
+    <div style="margin-top:8px;display:flex;justify-content:flex-end">
+      <button class="btn secondary" onclick="closeProductPicker()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- save confirmation modal (used for publish) -->
+<div class="modal" id="saveModal">
+  <div class="box">
+    <h3>Save Game — Publish</h3>
+    <div class="field"><label>Title</label><input id="saveTitle"></div>
+    <div class="field"><label>Genre</label><input id="saveGenre"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn secondary" onclick="document.getElementById('saveModal').style.display='none'">Cancel</button>
+      <button class="btn" onclick="confirmSave()">Publish</button>
+    </div>
+  </div>
+</div>
+
+<!-- draft modal -->
+<div class="modal" id="draftModal">
+  <div class="box">
+    <h3>Save Draft</h3>
+    <div class="field"><label>Draft name (optional)</label><input id="draftName" placeholder="My draft"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn secondary" onclick="document.getElementById('draftModal').style.display='none'">Cancel</button>
+      <button class="btn" onclick="confirmSave(true)">Save Draft</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Helpers & Auth ---------- */
+function getAccounts(){ return JSON.parse(localStorage.getItem('accounts')||'[]'); }
+function saveAccounts(a){ localStorage.setItem('accounts', JSON.stringify(a)); }
+function getCurrentUser(){ return localStorage.getItem('loggedInUser'); }
+function uid(){ return 'id_' + Math.random().toString(36).slice(2,9); }
+function getPaints(){ return JSON.parse(localStorage.getItem('paintHistory')||'[]'); }
+function getProducts(){ return JSON.parse(localStorage.getItem('products')||'[]'); }
+function getGames(){ return JSON.parse(localStorage.getItem('games')||'[]'); }
+function saveGames(g){ localStorage.setItem('games', JSON.stringify(g)); }
+function getDrafts(){ return JSON.parse(localStorage.getItem('gameDrafts')||'[]'); }
+function saveDrafts(d){ localStorage.setItem('gameDrafts', JSON.stringify(d)); }
+
+const currentUser = getCurrentUser();
+if(!currentUser){ alert('Please login first'); location.href='index.html'; }
+document.getElementById('currentUser').textContent = currentUser;
+
+/* ---------- State ---------- */
+let selectedTool = null;
+let placedItems = []; // {id, kind, x, y, extra}
+let selectedId = null;
+
+/* --- initialize toolbox selection handling --- */
+document.querySelectorAll('.tool-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> {
+    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedTool = btn.getAttribute('data-kind');
+    deselect();
+  });
+});
+
+/* --- workspace placement --- */
+const workspace = document.getElementById('workspace');
+workspace.addEventListener('click', (e)=>{
+  // place item only when a tool is selected
+  if(!selectedTool) return;
+  const rect = workspace.getBoundingClientRect();
+  // offset by scroll of workspace
+  const x = Math.round(e.clientX - rect.left + workspace.scrollLeft - 28);
+  const y = Math.round(e.clientY - rect.top + workspace.scrollTop - 28);
+  placeItem(selectedTool, x, y);
+});
+
+/* --- placeItem factory --- */
+function placeItem(kind,x,y,extra){
+  const id = uid();
+  const item = { id, kind, x: Math.max(0,Math.round(x)), y: Math.max(0,Math.round(y)), extra: extra || {} };
+  // default extras
+  if(kind === 'diamond') item.extra = { value: 10 };
+  if(kind === 'ghost') item.extra = { damage: 10, speed: 1.2 };
+  if(kind === 'gun') item.extra = { damage: 20, fireRate: 400 };
+  if(kind === 'teleport') item.extra = { pair: null };
+  if(kind === 'spawn') item.extra = { playerAvatar: currentUser };
+  if(kind === 'sprint') item.extra = { multiplier: 2.0, duration: 2000 };
+  if(kind === 'block') item.extra = {};
+  if(kind === 'productImage') item.extra = item.extra || {};
+  placedItems.push(item);
+  renderPlacedItems();
+  selectItem(id);
+}
+
+/* --- renderPlacedItems --- */
+function renderPlacedItems(){
+  workspace.innerHTML = '';
+  const worldWidthPercent = Number(document.getElementById('worldWidth').value||50);
+  workspace.style.width = Math.max(700, Math.round((worldWidthPercent/50) * 1000)) + 'px';
+  placedItems.forEach(it=>{
+    const el = document.createElement('div'); el.className='obj'; el.dataset.id = it.id;
+    el.style.left = it.x + 'px'; el.style.top = it.y + 'px';
+    // show emoji or spawn marker
+    if(it.kind === 'spawn'){
+      el.innerHTML = `<div class="spawn-mark">SP</div>`;
+      el.style.width='40px'; el.style.height='40px'; el.style.borderRadius='6px';
+    } else {
+      el.innerHTML = `<div class="big">${emojiForKind(it.kind)}</div>`;
+    }
+    if(selectedId === it.id) el.classList.add('selected');
+    el.addEventListener('mousedown',(ev)=>{ ev.stopPropagation(); selectItem(it.id); startDrag(it.id,ev); });
+    workspace.appendChild(el);
+  });
+}
+
+/* emoji map */
+function emojiForKind(k){
+  switch(k){
+    case 'tree': return '🌳';
+    case 'diamond': return '💎';
+    case 'ghost': return '👻';
+    case 'gun': return '🔫';
+    case 'teleport': return '🌀';
+    case 'productImage': return '🖼️';
+    case 'spawn': return '⬤';
+    case 'sprint': return '⚡';
+    case 'block': return '▦';
+    default: return '❓';
+  }
+}
+
+/* selection */
+function selectItem(id){
+  selectedId = id;
+  const it = placedItems.find(x=>x.id===id);
+  if(!it) return deselect();
+  document.getElementById('selectedInfo').textContent = `Selected ${it.kind} (${it.id})`;
+  document.getElementById('propId').value = it.id;
+  document.getElementById('propKind').value = it.kind;
+  document.getElementById('propX').value = it.x;
+  document.getElementById('propY').value = it.y;
+  document.getElementById('propExtra').value = JSON.stringify(it.extra);
+  document.querySelectorAll('.obj').forEach(el=>el.classList.toggle('selected', el.dataset.id === id));
+}
+function deselect(){ selectedId=null; document.getElementById('selectedInfo').textContent='No object selected'; document.getElementById('propId').value=''; document.getElementById('propKind').value=''; document.getElementById('propX').value=''; document.getElementById('propY').value=''; document.getElementById('propExtra').value=''; document.querySelectorAll('.obj').forEach(el=>el.classList.remove('selected')); }
+
+/* prop updates */
+function updateSelectedProp(field,value){
+  if(!selectedId) return;
+  const it = placedItems.find(x=>x.id===selectedId);
+  if(!it) return;
+  it[field] = Number(value);
+  renderPlacedItems();
+}
+function applyExtraJson(){
+  if(!selectedId) return;
+  const it = placedItems.find(x=>x.id===selectedId);
+  if(!it) return;
+  try{
+    const val = JSON.parse(document.getElementById('propExtra').value||'{}');
+    it.extra = val;
+    renderPlacedItems();
+  }catch(e){ alert('Invalid JSON'); }
+}
+function deleteSelected(){ if(!selectedId) return; const idx=placedItems.findIndex(x=>x.id===selectedId); if(idx>=0){ placedItems.splice(idx,1); selectedId=null; renderPlacedItems(); deselect(); } }
+
+/* drag */
+function startDrag(id, downEvent){
+  const it = placedItems.find(x=>x.id===id);
+  if(!it) return;
+  const rect = workspace.getBoundingClientRect();
+  const startX = downEvent.clientX;
+  const startY = downEvent.clientY;
+  const origX = it.x; const origY = it.y;
+  function moveHandler(e){
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    it.x = Math.max(0, Math.round(origX + dx + workspace.scrollLeft));
+    it.y = Math.max(0, Math.round(origY + dy + workspace.scrollTop));
+    renderPlacedItems(); selectItem(it.id);
+  }
+  function upHandler(){ window.removeEventListener('mousemove', moveHandler); window.removeEventListener('mouseup', upHandler); }
+  window.addEventListener('mousemove', moveHandler);
+  window.addEventListener('mouseup', upHandler);
+}
+
+/* clear workspace */
+function clearWorkspace(){ if(!confirm('Clear workspace?')) return; placedItems=[]; renderPlacedItems(); deselect(); }
+
+/* product picker */
+function openProductPicker(){
+  const modal = document.getElementById('productModal'); modal.style.display='flex';
+  const list = document.getElementById('productList'); list.innerHTML='';
+  const paints = getPaints();
+  if(!paints.length){ list.innerHTML = '<div class="small muted">No history images</div>'; return; }
+  paints.forEach(p=>{
+    const card = document.createElement('div'); card.style.width='120px'; card.style.border='1px solid #eee'; card.style.padding='8px'; card.style.borderRadius='8px'; card.style.background='#fff'; card.style.cursor='pointer';
+    const img = document.createElement('img'); img.src=p.dataUrl; img.style.width='100%'; img.style.height='70px'; img.style.objectFit='cover'; img.style.borderRadius='6px';
+    const name = document.createElement('div'); name.style.fontSize='13px'; name.style.marginTop='6px'; name.textContent = p.name||p.id;
+    card.appendChild(img); card.appendChild(name);
+    card.addEventListener('click', ()=>{
+      const x = 40 + Math.floor(Math.random()*200);
+      const y = 40 + Math.floor(Math.random()*200);
+      const obj = { id: uid(), kind:'productImage', x, y, extra: { sourceId: p.id, price: 0 } };
+      placedItems.push(obj);
+      renderPlacedItems();
+      document.getElementById('pickedProduct').textContent = 'Picked: ' + (p.name||p.id);
+      closeProductPicker();
+    });
+    list.appendChild(card);
+  });
+}
+function closeProductPicker(){ document.getElementById('productModal').style.display='none'; }
+
+/* ---------- Save / Draft / Publish ---------- */
+function saveDraft(){
+  document.getElementById('draftModal').style.display='flex';
+}
+function saveGame(asDraft){
+  // if asDraft true -> open draft modal; else open publish modal
+  if(asDraft){ document.getElementById('draftModal').style.display='flex'; return; }
+  document.getElementById('saveTitle').value = document.getElementById('gameTitle').value || '';
+  document.getElementById('saveGenre').value = document.getElementById('gameGenre').value || '';
+  document.getElementById('saveModal').style.display='flex';
+}
+function confirmSave(isDraft){
+  // isDraft==true when called by draft modal confirm; but we unify by passing flag
+  const draftFlag = (isDraft === true) || (document.getElementById('draftModal').style.display === 'flex' && !document.getElementById('saveModal').style.display);
+  const title = draftFlag ? (document.getElementById('gameTitle').value || ('Draft ' + new Date().toLocaleString())) : (document.getElementById('saveTitle').value.trim() || 'Untitled Game');
+  const genre = draftFlag ? (document.getElementById('gameGenre').value || '') : (document.getElementById('saveGenre').value || '');
+  const visibility = document.getElementById('visibility').value;
+  const serverType = document.getElementById('serverType').value;
+  const lifebar = Number(document.getElementById('lifebarInput').value || 50);
+  const joystick = document.getElementById('joystickSelect').value === 'true';
+  const pauseButton = document.getElementById('pauseSelect').value === 'true';
+  const worldWidth = Number(document.getElementById('worldWidth').value || 50);
+  const cameraFollow = document.getElementById('cameraFollow').checked;
+  const lighting = Number(document.getElementById('lighting').value || 12);
+
+  // validate teleports pairing
+  const teleports = placedItems.filter(it=>it.kind==='teleport');
+  if(teleports.length>0 && teleports.length % 2 !== 0){
+    if(!confirm('You have an odd number of teleporters. Teleports normally require pairs. Save anyway?')) return;
+  }
+
+  const gameObj = {
+    id: 'game_' + Math.random().toString(36).slice(2,9),
+    title, genre, creator: currentUser,
+    visibility, serverType,
+    worldWidthPercent: worldWidth,
+    cameraFollow,
+    lighting,
+    ui: { lifebar, joystick, pauseButton },
+    items: JSON.parse(JSON.stringify(placedItems)),
+    isDraft: draftFlag,
+    createdAt: new Date().toISOString()
+  };
+
+  if(draftFlag){
+    const drafts = getDrafts();
+    drafts.push(gameObj);
+    saveDrafts(drafts);
+    document.getElementById('draftModal').style.display='none';
+    alert('Draft saved locally.');
+    return;
+  }
+
+  // publish: save to games array (replace if editing existing)
+  const games = getGames();
+  const editIndex = localStorage.getItem('editGameIndex');
+  if(editIndex !== null && editIndex !== undefined){
+    const idx = Number(editIndex);
+    if(!isNaN(idx) && games[idx] && (games[idx].creator === currentUser || ['Airulmsyah','AMS','Ams09'].includes(currentUser))){
+      gameObj.id = games[idx].id; games[idx] = gameObj; saveGames(games);
+      localStorage.removeItem('editGameIndex');
+      document.getElementById('saveModal').style.display='none';
+      alert('Game updated and published.');
+      location.href='home.html';
+      return;
+    }
+  }
+
+  games.push(gameObj);
+  saveGames(games);
+  document.getElementById('saveModal').style.display='none';
+  alert('Game published to Game Discovery.');
+  location.href='home.html';
+}
+
+/* --- quick save from draft modal (confirm) --- */
+function confirmDraftFromModal(){
+  const draftName = document.getElementById('draftName').value || '';
+  // reuse confirmSave with draft flag true
+  confirmSave(true);
+  document.getElementById('draftModal').style.display='none';
+}
+
+/* wire confirm button on draft modal */
+document.querySelector('#draftModal .box button.btn').addEventListener('click', confirmDraftFromModal);
+
+/* ---------- Test Game: save tempTestGame and go to test page ---------- */
+function testGame(){
+  const lifebar = Number(document.getElementById('lifebarInput').value || 50);
+  const joystick = document.getElementById('joystickSelect').value === 'true';
+  const pauseButton = document.getElementById('pauseSelect').value === 'true';
+  const worldWidth = Number(document.getElementById('worldWidth').value || 50);
+  const cameraFollow = document.getElementById('cameraFollow').checked;
+  const lighting = Number(document.getElementById('lighting').value || 12);
+  const temp = {
+    title: document.getElementById('gameTitle').value || 'Temp Test',
+    creator: currentUser,
+    worldWidthPercent: worldWidth,
+    cameraFollow,
+    lighting,
+    ui: { lifebar, joystick, pauseButton },
+    items: JSON.parse(JSON.stringify(placedItems))
+  };
+  localStorage.setItem('tempTestGame', JSON.stringify(temp));
+  localStorage.setItem('testFrom','editor');
+  location.href='test_game.html';
+}
+
+/* ---------- product picker reuse ---------- */
+function closeProductPicker(){ document.getElementById('productModal').style.display='none'; }
+
+/* expose state for console testing */
+window.placedItems = placedItems;
+window.placeItem = placeItem;
+window.renderPlacedItems = renderPlacedItems;
+
+/* initial render */
+renderPlacedItems();
+
+/* If editGameIndex exists, auto-load that game data */
+(function loadIfEditing(){
+  const idx = localStorage.getItem('editGameIndex');
+  if(idx !== null && idx !== undefined){
+    const games = getGames();
+    const g = games[Number(idx)];
+    if(g && (g.creator === currentUser || ['Airulmsyah','AMS','Ams09'].includes(currentUser))){
+      // populate UI & items
+      document.getElementById('gameTitle').value = g.title || '';
+      document.getElementById('gameGenre').value = g.genre || '';
+      document.getElementById('lifebarInput').value = (g.ui && g.ui.lifebar) ? g.ui.lifebar : 50;
+      document.getElementById('joystickSelect').value = (g.ui && g.ui.joystick) ? 'true' : 'false';
+      document.getElementById('pauseSelect').value = (g.ui && g.ui.pauseButton) ? 'true' : 'false';
+      document.getElementById('visibility').value = g.visibility || 'Public';
+      document.getElementById('serverType').value = g.serverType || 'Singleplayer';
+      document.getElementById('worldWidth').value = g.worldWidthPercent || 50;
+      document.getElementById('worldWidthVal').textContent = (g.worldWidthPercent||50)+'%';
+      document.getElementById('cameraFollow').checked = !!g.cameraFollow;
+      if(typeof g.lighting !== 'undefined'){ document.getElementById('lighting').value = g.lighting; document.getElementById('lightingVal').textContent = g.lighting; }
+      // load items
+      placedItems = JSON.parse(JSON.stringify(g.items || []));
+      renderPlacedItems();
+    }
+  }
+})();
+</script>
+</body>
+</html>

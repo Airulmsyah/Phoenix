@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paint — GameWorld</title>
+<style>
+  :root{--accent:#0f3460}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,Arial,sans-serif;background:#fff;color:#222;display:flex;flex-direction:column;align-items:center}
+  header{width:100%;padding:12px;border-bottom:1px solid #eee;background:#fafafa;display:flex;align-items:center;gap:12px}
+  .console-icon{width:34px;height:34px;border-radius:8px;background:#e9eef9;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent)}
+  .username{color:var(--accent)}
+  .container{max-width:1000px;width:100%;padding:20px;display:flex;gap:20px;align-items:flex-start}
+  .tools{width:260px;background:#fbfbfb;border:1px solid #eee;border-radius:10px;padding:12px}
+  .canvas-wrap{flex:1;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px;display:flex;flex-direction:column;align-items:center}
+  canvas{border:1px solid #e5e7eb;border-radius:8px;background:#fff}
+  .colors{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px}
+  .color{height:30px;border-radius:6px;border:1px solid #ddd;cursor:pointer}
+  button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+  input,select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-bottom:8px}
+  .save-note{font-size:13px;color:#666;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="console-icon">▦</div>
+    <div class="username" id="u">Painter</div>
+  </div>
+  <div style="margin-left:auto"><button onclick="goHome()">Back</button></div>
+</header>
+
+<div class="container">
+  <aside class="tools">
+    <div style="font-weight:700;margin-bottom:8px">Tools</div>
+    <div class="colors" id="colorGrid"></div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="setTool('draw')">Draw</button>
+      <button onclick="setTool('erase')">Eraser</button>
+      <button onclick="setTool('fill')">Fill</button>
+      <button onclick="undo()">Undo</button>
+    </div>
+
+    <hr style="margin:12px 0">
+    <div style="font-weight:700">Save Options</div>
+    <input id="itemName" placeholder="Item name (optional)">
+    <input id="itemPrice" placeholder="Price (coins) - only for sale" type="number">
+    <label>Visibility</label>
+    <select id="visibility"><option value="Public">Public</option><option value="Friends">Friends Only</option></select>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="saveToLibrary()">💾 Save to Library</button>
+      <button onclick="sellItem()">🏷️ Put for Sale</button>
+    </div>
+    <div class="save-note">If name is blank, the site auto-generates one. You can rename later in History Library.</div>
+  </aside>
+
+  <div class="canvas-wrap">
+    <canvas id="canvas" width="900" height="520"></canvas>
+    <div style="margin-top:12px"><small class="muted">Draw on the canvas then Save or Sell.</small></div>
+  </div>
+</div>
+
+<script>
+  // helpers & auth
+  function getAccounts(){ return JSON.parse(localStorage.getItem('accounts')||'[]'); }
+  function saveAccounts(a){ localStorage.setItem('accounts', JSON.stringify(a)); }
+  function getCurrentUser(){ return localStorage.getItem('loggedInUser'); }
+  function ensureUser(u){ if(!u) return null; const a=getAccounts(); const f=a.find(x=>x.username===u); if(f){ if(typeof f.coins!=='number') f.coins=Number(f.coins||0); if(!f.friends) f.friends=[]; if(!f.vip) f.vip=null; return f;} return null;}
+  function getPaints(){ return JSON.parse(localStorage.getItem('paintHistory')||'[]'); }
+  function savePaints(p){ localStorage.setItem('paintHistory', JSON.stringify(p)); }
+  function getProducts(){ return JSON.parse(localStorage.getItem('products')||'[]'); }
+  function saveProducts(p){ localStorage.setItem('products', JSON.stringify(p)); }
+  function uid(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+
+  const current = getCurrentUser();
+  if(!current) location.href='index.html';
+  document.getElementById('u').textContent = `${current}'s Painter`;
+
+  // canvas logic
+  const canvas = document.getElementById('canvas'); const ctx = canvas.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  let tool='draw', color='#000000', painting=false, history=[];
+  function pushHistory(){ history.push(canvas.toDataURL()); if(history.length>50) history.shift(); }
+  function undo(){ if(history.length){ const img=new Image(); img.src=history.pop(); img.onload=()=>ctx.drawImage(img,0,0); } }
+  canvas.onmousedown = (e)=>{ const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left; const y=e.clientY-r.top; if(tool==='fill'){ floodFill(Math.round(x),Math.round(y), hexToRgb(color)); pushHistory(); return } painting=true; ctx.beginPath(); ctx.moveTo(x,y); }
+  canvas.onmousemove = (e)=>{ if(!painting) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left; const y=e.clientY-r.top; ctx.lineTo(x,y); ctx.strokeStyle = (tool==='erase'?'#ffffff':color); ctx.lineWidth=8; ctx.lineCap='round'; ctx.stroke(); }
+  window.addEventListener('mouseup', ()=>{ if(painting){ painting=false; pushHistory(); } });
+
+  function setTool(t){ tool=t; }
+  // colors
+  const colors = ['#000000','#ffffff','#ff3b30','#34c759','#007aff','#5856d6','#ffcc00','#ff9500','#8e44ad','#a52a2a','#808080','#00bcd4'];
+  const grid = document.getElementById('colorGrid');
+  colors.forEach(c=>{ const d=document.createElement('div'); d.className='color'; d.style.background=c; d.onclick=()=>{ color=c; }; grid.appendChild(d); });
+
+  // fill helper
+  function hexToRgb(hex){ hex=hex.replace('#',''); if(hex.length===3) hex=hex.split('').map(x=>x+x).join(''); const v=parseInt(hex,16); return {r:(v>>16)&255,g:(v>>8)&255,b:v&255}; }
+  function floodFill(sx,sy,fill){ const img=ctx.getImageData(0,0,canvas.width,canvas.height); const w=img.width,h=img.height; const idx=(sy*w+sx)*4; const tr=img.data[idx],tg=img.data[idx+1],tb=img.data[idx+2]; if(tr===fill.r&&tg===fill.g&&tb===fill.b) return; const stack=[{x:sx,y:sy}]; while(stack.length){ const p=stack.pop(); const x=p.x,y=p.y; if(x<0||y<0||x>=w||y>=h) continue; const i=(y*w+x)*4; const r=img.data[i],g=img.data[i+1],b=img.data[i+2]; if(r===tr&&g===tg&&b===tb){ img.data[i]=fill.r; img.data[i+1]=fill.g; img.data[i+2]=fill.b; img.data[i+3]=255; stack.push({x:x+1,y:y},{x:x-1,y:y},{x:x,y:y+1},{x:x,y:y-1}); } } ctx.putImageData(img,0,0); }
+
+  // save & sell
+  function autoName(){ const ps = getPaints(); return 'Art_'+(ps.length+1).toString().padStart(3,'0'); }
+  function saveToLibrary(){
+    const name = (document.getElementById('itemName').value || '').trim() || autoName();
+    const id = uid(); const dataUrl = canvas.toDataURL();
+    const obj = { id, owner: current, name, dataUrl, createdAt: new Date().toISOString() };
+    const arr = getPaints(); arr.push(obj); savePaints(arr);
+    alert('Saved to your History Library.');
+    // try to refresh home header when user returns
+    try{ window.opener && window.opener.refreshHomeHeader && window.opener.refreshHomeHeader(); }catch(e){}
+    location.href='home.html';
+  }
+  function sellItem(){
+    const name = (document.getElementById('itemName').value || '').trim() || autoName();
+    const price = Number(document.getElementById('itemPrice').value);
+    const vis = document.getElementById('visibility').value;
+    if(!price || price<=0) return alert('Enter a valid price.');
+    const id = uid(); const dataUrl = canvas.toDataURL();
+    const paintObj = { id, owner: current, name, dataUrl, createdAt: new Date().toISOString() };
+    const prodObj = { id, owner: current, name, dataUrl, price, visibility: vis, createdAt: new Date().toISOString() };
+    const paints = getPaints(); paints.push(paintObj); savePaints(paints);
+    const products = getProducts(); products.push(prodObj); saveProducts(products);
+    alert('Item listed on the Shop.');
+    location.href='shop.html';
+  }
+
+  function goHome(){ location.href='home.html' }
+</script>
+</body>
+</html>

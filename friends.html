@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Friends List</title>
+  <style>
+    :root { --accent: #0f3460; --accentHover: #533483; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, Arial; background:#fff; color:#222; min-height:100vh; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:14px 28px; border-bottom:1px solid #eee; background:#fafafa; }
+    .username { font-weight:600; color:var(--accent); cursor:pointer; }
+    button { background:var(--accent); color:#fff; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
+    button:hover { background:var(--accentHover); }
+    main { max-width:900px; margin:30px auto; padding:0 20px; }
+    h2 { margin-top:30px; margin-bottom:12px; color:var(--accent); }
+    .friend-card {
+      display:flex; align-items:center; justify-content:space-between;
+      background:#f8f8f8; border:1px solid #eee; padding:10px 14px;
+      border-radius:8px; margin-bottom:8px;
+    }
+    .friend-name { font-weight:600; color:#222; }
+    .admin-actions button { background:#e94560; margin-left:6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="username" id="usernameDisplay">Welcome, Player</div>
+    <button onclick="goHome()">🏠 Home</button>
+  </header>
+
+  <main>
+    <h2>🌐 All Users Around the World</h2>
+    <div id="globalUsers"></div>
+
+    <h2>👫 Your Friends</h2>
+    <div id="friendsList"></div>
+  </main>
+
+  <script>
+    const currentUser = localStorage.getItem('loggedInUser');
+    if(!currentUser) location.href='index.html';
+
+    document.getElementById('usernameDisplay').textContent = `Welcome, ${currentUser}`;
+    document.getElementById('usernameDisplay').onclick = () => location.href='avatar.html';
+    function goHome(){ location.href='home.html'; }
+
+    const owners = ['Airulmsyah','AMS','Ams09'];
+    const isOwner = owners.includes(currentUser);
+    let accounts = JSON.parse(localStorage.getItem('accounts') || '[]');
+
+    function saveAccounts() {
+      localStorage.setItem('accounts', JSON.stringify(accounts));
+    }
+
+    function getCurrentUserData() {
+      return accounts.find(a => a.username === currentUser);
+    }
+
+    function loadGlobalUsers() {
+      const globalContainer = document.getElementById('globalUsers');
+      globalContainer.innerHTML = '';
+
+      const sorted = [...accounts].sort((a,b)=>a.username.localeCompare(b.username));
+      const me = getCurrentUserData();
+
+      sorted.forEach(acc => {
+        const card = document.createElement('div');
+        card.className = 'friend-card';
+        const left = document.createElement('div');
+        left.className = 'friend-name';
+        left.textContent = acc.username;
+        card.appendChild(left);
+
+        const right = document.createElement('div');
+
+        // skip current user
+        if(acc.username === currentUser) {
+          right.textContent = "(You)";
+        }
+        else if(isOwner) {
+          const delBtn = document.createElement('button');
+          delBtn.textContent = 'Delete';
+          delBtn.onclick = ()=>{
+            if(confirm('Delete '+acc.username+'?')){
+              accounts = accounts.filter(a => a.username !== acc.username);
+              saveAccounts();
+              loadGlobalUsers(); loadFriendsList();
+            }
+          };
+          const banBtn = document.createElement('button');
+          banBtn.textContent = 'Ban';
+          banBtn.onclick = ()=>{
+            if(confirm('Ban '+acc.username+'?')){
+              localStorage.setItem('banned_'+acc.username, 'true');
+              alert(acc.username+' has been banned.');
+            }
+          };
+          right.appendChild(banBtn);
+          right.appendChild(delBtn);
+        } else {
+          const isFriend = me.friends && me.friends.includes(acc.username);
+          const addBtn = document.createElement('button');
+          addBtn.textContent = isFriend ? '✅ Added' : '➕ Add Friend';
+          addBtn.style.background = isFriend ? '#999' : 'var(--accent)';
+          addBtn.onclick = ()=>{
+            if(isFriend) return;
+            if(!me.friends) me.friends = [];
+            me.friends.push(acc.username);
+            saveAccounts();
+            loadGlobalUsers(); loadFriendsList();
+          };
+          right.appendChild(addBtn);
+        }
+
+        card.appendChild(right);
+        globalContainer.appendChild(card);
+      });
+    }
+
+    function loadFriendsList() {
+      const container = document.getElementById('friendsList');
+      const me = getCurrentUserData();
+      container.innerHTML = '';
+
+      if(!me.friends || me.friends.length===0) {
+        container.innerHTML = '<div>You have no friends yet. Add some above!</div>';
+        return;
+      }
+
+      me.friends.sort();
+      me.friends.forEach(fname=>{
+        const card = document.createElement('div');
+        card.className = 'friend-card';
+        const left = document.createElement('div');
+        left.className = 'friend-name';
+        left.textContent = fname;
+        card.appendChild(left);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '❌ Remove';
+        removeBtn.onclick = ()=>{
+          me.friends = me.friends.filter(f=>f!==fname);
+          saveAccounts();
+          loadGlobalUsers(); loadFriendsList();
+        };
+        card.appendChild(removeBtn);
+        container.appendChild(card);
+      });
+    }
+
+    // initialize
+    if(!getCurrentUserData().friends) getCurrentUserData().friends=[];
+    loadGlobalUsers();
+    loadFriendsList();
+  </script>
+</body>
+</html>

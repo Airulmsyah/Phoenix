@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: white;
+    }
+
+    .box {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      padding: 40px 60px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 4px 30px rgba(0,0,0,0.4);
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    button {
+      display: block;
+      width: 200px;
+      margin: 15px auto;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      background: #0f3460;
+      color: white;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background: #533483;
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Create</h1>
+    <button onclick="createGame()">Create Game</button>
+    <button onclick="createStuff()">Create Stuff</button>
+  </div>
+
+  <script>
+    function createGame() {
+      window.location.href = "create_game.html";
+    }
+    function createStuff() {
+      window.location.href = "paint.html";
+    }
+  </script>
+</body>
+</html>
